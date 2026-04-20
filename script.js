@@ -75,6 +75,14 @@ class ConfigManager {
 // 创建全局配置管理器
 const config = new ConfigManager();
 
+// 多对象管理
+let objects = JSON.parse(localStorage.getItem('objects') || '[]');
+let currentObject = localStorage.getItem('currentObject') || 'A';
+
+// 长按检测变量
+let longPressTimer = null;
+const LONG_PRESS_DELAY = 500;
+
 // ========== Prompt 链式组合架构 ==========
 
 // ----- 技法库定义 -----
@@ -413,12 +421,29 @@ class PromptBuilder {
     buildSystemPrompt(options = {}) {
         const { styleId = null, mode = 'express', sceneType = null, customContext = '' } = options;
 
+        // 获取当前对象信息
+        const currentObj = objects.find(o => o.letter === currentObject);
+        
+        // 使用对象的专属设置或全局设置
+        const config = { ...this.config };
+        if (currentObj) {
+            if (currentObj.customIntimacy) {
+                config.intimacy = currentObj.intimacy;
+            }
+            if (currentObj.customSweetness) {
+                config.sweetness = currentObj.sweetness;
+            }
+            if (currentObj.relationshipStage !== 'global') {
+                config.relationshipStage = currentObj.relationshipStage;
+            }
+        }
+
         // 初始化各层
-        const baseLayer = new BaseLayer(this.config);
-        const objectContextLayer = new ObjectContextLayer(this.config, history);
-        const techniqueLayer = new TechniqueLayer(this.config);
-        const styleLayer = new StyleLayer(this.config);
-        const sceneLayer = new SceneLayer(this.config);
+        const baseLayer = new BaseLayer(config);
+        const objectContextLayer = new ObjectContextLayer(config, history);
+        const techniqueLayer = new TechniqueLayer(config);
+        const styleLayer = new StyleLayer(config);
+        const sceneLayer = new SceneLayer(config);
 
         // 构建基础层（始终包含）
         baseLayer
@@ -430,6 +455,26 @@ class PromptBuilder {
 
         // 应用对象上下文层（记忆锚点与对话历史）
         objectContextLayer.applyObjectContext();
+
+        // 添加当前对象的专属上下文
+        if (currentObj) {
+            let objectInfo = `【当前对话对象：${currentObj.letter}】`;
+            if (currentObj.features) {
+                objectInfo += `\n特征：${currentObj.features}`;
+            }
+            if (currentObj.memory) {
+                objectInfo += `\n记忆锚点：${currentObj.memory}`;
+            }
+            // 添加最近3-5条对话记录
+            if (currentObj.conversation.length > 0) {
+                objectInfo += `\n近期聊天：`;
+                const recentConversations = currentObj.conversation.slice(-5);
+                recentConversations.forEach(item => {
+                    objectInfo += `\n${item.author}：${item.text}`;
+                });
+            }
+            objectContextLayer.parts.unshift(objectInfo);
+        }
 
         // 添加技法层（根据开关状态）
         techniqueLayer.applyEnabledTechniques();
@@ -753,6 +798,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGenderSettings();
     loadProcessSettings();
     initWebDavSettings();
+    loadHistorySettings();
+    // 更新指令入口按钮显示状态
+    updatePromptEntryButton();
     // 渲染技法开关UI
     renderTechniqueSwitches();
     // 初始化所有滑块
@@ -846,23 +894,6 @@ function closeAddProvider() {
     document.getElementById('addProviderOverlay').classList.remove('active');
 }
 
-function selectPlatform(platform) {
-    document.querySelectorAll('.platform-btn').forEach(btn => btn.classList.remove('selected'));
-    document.querySelector(`[data-platform="${platform}"]`).classList.add('selected');
-    
-    const config = document.getElementById('providerConfig');
-    config.style.display = 'block';
-    
-    const platformInfo = PLATFORMS[platform];
-    document.getElementById('providerUrl').placeholder = platformInfo.defaultUrl;
-    
-    const modelsList = document.getElementById('providerModelsList');
-    modelsList.innerHTML = '';
-    platformInfo.models.forEach(model => {
-        addModelInput(model);
-    });
-}
-
 let modelInputCount = 0;
 let currentModels = [];
 
@@ -874,6 +905,7 @@ function selectPlatform(platform) {
     config.style.display = 'block';
     
     const platformInfo = PLATFORMS[platform];
+    document.getElementById('providerUrl').value = platformInfo.defaultUrl;
     document.getElementById('providerUrl').placeholder = platformInfo.defaultUrl;
     
     currentModels = platformInfo.models.map((name, index) => ({
@@ -887,7 +919,111 @@ function selectPlatform(platform) {
     renderModelList();
 }
 
-function validateApiUrl(url) {
+// 获取模型列表
+async function fetchModels() {
+    const platform = document.querySelector('.platform-btn.selected')?.dataset.platform;
+    let url = document.getElementById('providerUrl').value.trim();
+    const key = document.getElementById('providerKey').value.trim();
+    
+    if (!platform) {
+        showToast('请先选择平台');
+        return;
+    }
+    
+    if (!url) {
+        showToast('请输入API地址');
+        return;
+    }
+    
+    if (!key) {
+        showToast('请输入API密钥');
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        // 验证并处理API URL
+        const validatedUrl = validateApiUrl(url, platform);
+        if (!validatedUrl) {
+            throw new Error('无效的API地址');
+        }
+        
+        let modelsEndpoint = validatedUrl;
+        // 构建模型列表API端点
+        console.log('原始URL:', url);
+        console.log('验证后URL:', validatedUrl);
+        console.log('平台:', platform);
+        
+        // 直接构建模型列表API端点，不依赖复杂的替换逻辑
+        if (platform === 'openai') {
+            // OpenAI: https://api.openai.com/v1/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/v1/models';
+        } else if (platform === 'claude') {
+            // Claude: https://api.anthropic.com/v1/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/v1/models';
+        } else if (platform === 'deepseek') {
+            // DeepSeek: https://api.deepseek.com/v1/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/v1/models';
+        } else if (platform === 'kimi') {
+            // Kimi: https://api.moonshot.cn/v1/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/v1/models';
+        } else if (platform === 'doubao') {
+            // 豆包: https://ark.cn-beijing.volces.com/api/v3/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/api/v3/models';
+        } else if (platform === 'qwen') {
+            // 通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1/models
+            modelsEndpoint = url.trim().replace(/\/$/, '') + '/compatible-mode/v1/models';
+        }
+        
+        console.log('模型列表API端点:', modelsEndpoint);
+        
+        const response = await fetch(modelsEndpoint, {
+            headers: {
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // 解析模型列表
+        let models = [];
+        if (data.data) {
+            // OpenAI 格式
+            models = data.data.map(m => m.id);
+        } else if (data.models) {
+            // 其他格式
+            models = data.models.map(m => m.id || m.name);
+        }
+        
+        if (models.length === 0) {
+            throw new Error('未获取到模型列表');
+        }
+        
+        // 更新当前模型列表
+        currentModels = models.map((model, index) => ({
+            id: 'model_' + (++modelInputCount),
+            name: model,
+            contextLength: getContextLength(model),
+            enabled: true,
+            isDefault: index === 0
+        }));
+        
+        renderModelList();
+        showToast(`成功获取 ${models.length} 个模型`);
+    } catch (error) {
+        showToast(`获取模型列表失败：${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+function validateApiUrl(url, platform = null) {
     if (!url) return null;
     
     // 移除末尾的斜杠
@@ -900,21 +1036,21 @@ function validateApiUrl(url) {
             // 保留现有格式
         } else {
             // 根据平台类型添加适当的后缀
-            if (cleanedUrl.includes('openai')) {
-                cleanedUrl += '/v1/chat/completions';
-            } else if (cleanedUrl.includes('anthropic')) {
-                cleanedUrl += '/v1/messages';
-            } else if (cleanedUrl.includes('deepseek')) {
-                cleanedUrl += '/v1/chat/completions';
-            } else if (cleanedUrl.includes('moonshot')) {
-                cleanedUrl += '/v1/chat/completions';
-            } else if (cleanedUrl.includes('volces')) {
-                cleanedUrl += '/api/v3/chat/completions';
-            } else if (cleanedUrl.includes('dashscope')) {
-                cleanedUrl += '/compatible-mode/v1/chat/completions';
-            } else {
-                // 默认添加 /v1/chat/completions
-                cleanedUrl += '/v1/chat/completions';
+            if (platform === 'openai' || (platform === null && cleanedUrl.includes('openai'))) {
+                cleanedUrl += '/v1';
+            } else if (platform === 'claude' || (platform === null && cleanedUrl.includes('anthropic'))) {
+                cleanedUrl += '/v1';
+            } else if (platform === 'deepseek' || (platform === null && cleanedUrl.includes('deepseek'))) {
+                cleanedUrl += '/v1';
+            } else if (platform === 'kimi' || (platform === null && cleanedUrl.includes('moonshot'))) {
+                cleanedUrl += '/v1';
+            } else if (platform === 'doubao' || (platform === null && cleanedUrl.includes('volces'))) {
+                cleanedUrl += '/api/v3';
+            } else if (platform === 'qwen' || (platform === null && cleanedUrl.includes('dashscope'))) {
+                cleanedUrl += '/compatible-mode/v1';
+            } else if (platform === null) {
+                // 默认添加 /v1
+                cleanedUrl += '/v1';
             }
         }
     }
@@ -962,17 +1098,7 @@ function updateModelName(index, value) {
     currentModels[index].name = value;
 }
 
-function addNewModel() {
-    const newModel = {
-        id: 'model_' + (++modelInputCount),
-        name: '',
-        contextLength: '128K',
-        enabled: true,
-        isDefault: currentModels.length === 0
-    };
-    currentModels.push(newModel);
-    renderModelList();
-}
+
 
 function setDefaultModel(index) {
     currentModels.forEach((m, i) => m.isDefault = (i === index));
@@ -1062,11 +1188,15 @@ function saveProvider() {
 }
 
 function openProviderDetail(id) {
-    const provider = CONFIG.providers.find(p => p.id === id);
+    // 从localStorage重新加载最新配置，解决多设备访问问题
+    const providers = JSON.parse(localStorage.getItem('ai_providers') || '[]');
+    const activeProviderId = localStorage.getItem('active_provider') || null;
+    
+    const provider = providers.find(p => p.id === id);
     if (!provider) return;
     
     const detailBody = document.getElementById('providerDetailBody');
-    const isActive = CONFIG.activeProvider === id;
+    const isActive = activeProviderId === id;
     const enabledModels = provider.models?.filter(m => m.enabled) || [];
     
     detailBody.innerHTML = `
@@ -1099,8 +1229,9 @@ function closeProviderDetail() {
 }
 
 function setActiveProvider(id) {
-    CONFIG.activeProvider = id;
+    // 更新localStorage和CONFIG对象
     localStorage.setItem('active_provider', id);
+    CONFIG.activeProvider = id;
     renderProviders();
     closeProviderDetail();
     showToast('已设为默认服务商');
@@ -1109,13 +1240,21 @@ function setActiveProvider(id) {
 function deleteProvider(id) {
     if (!confirm('确定要删除该服务商吗？')) return;
     
-    CONFIG.providers = CONFIG.providers.filter(p => p.id !== id);
-    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
+    // 从localStorage重新加载最新配置，解决多设备访问问题
+    let providers = JSON.parse(localStorage.getItem('ai_providers') || '[]');
+    let activeProviderId = localStorage.getItem('active_provider') || null;
     
-    if (CONFIG.activeProvider === id) {
-        CONFIG.activeProvider = CONFIG.providers[0]?.id || null;
-        localStorage.setItem('active_provider', CONFIG.activeProvider || '');
+    providers = providers.filter(p => p.id !== id);
+    localStorage.setItem('ai_providers', JSON.stringify(providers));
+    
+    if (activeProviderId === id) {
+        activeProviderId = providers[0]?.id || null;
+        localStorage.setItem('active_provider', activeProviderId || '');
+        CONFIG.activeProvider = activeProviderId;
     }
+    
+    // 更新CONFIG对象
+    CONFIG.providers = providers;
     
     renderProviders();
     closeProviderDetail();
@@ -1357,6 +1496,12 @@ function loadGenderSettings() {
         creativitySelect.value = creativity;
     }
     
+    const showPromptEntry = config.get('show_prompt_entry', 'true') === 'true';
+    const showPromptEntryCheckbox = document.getElementById('showPromptEntry');
+    if (showPromptEntryCheckbox) {
+        showPromptEntryCheckbox.checked = showPromptEntry;
+    }
+    
     initRelationshipSelector();
 }
 
@@ -1423,10 +1568,15 @@ function saveGenerate() {
     const batchSize = document.getElementById('batchSizeRange').value;
     const lengthSelect = document.getElementById('lengthSelect').value;
     const creativitySelect = document.getElementById('creativitySelect').value;
+    const showPromptEntry = document.getElementById('showPromptEntry').checked;
     
     config.set('batch_size', batchSize);
     config.set('content_length', lengthSelect);
     config.set('creativity', creativitySelect);
+    config.set('show_prompt_entry', showPromptEntry ? 'true' : 'false');
+    
+    // 更新首页指令入口按钮的显示状态
+    updatePromptEntryButton();
     
     showToast('已保存：每次生成 ' + batchSize + ' 条'); 
 }
@@ -1464,6 +1614,154 @@ function saveSync() {
     
     showToast('同步设置已保存');
 }
+
+// 保存历史管理设置
+function saveHistory() {
+    const historyDays = document.getElementById('historyDays').value;
+    const historyLimit = document.getElementById('historyLimit').value;
+    
+    localStorage.setItem('historyDays', historyDays);
+    localStorage.setItem('historyLimit', historyLimit);
+    
+    // 保存后立即清理历史记录
+    cleanupHistory();
+    renderHistory();
+    
+    showToast('历史管理设置已保存');
+}
+
+// 加载历史管理设置
+function loadHistorySettings() {
+    const historyDays = localStorage.getItem('historyDays') || '30';
+    const historyLimit = localStorage.getItem('historyLimit') || '50';
+    
+    document.getElementById('historyDays').value = historyDays;
+    document.getElementById('historyLimit').value = historyLimit;
+}
+
+// 清理历史记录
+function cleanupHistory() {
+    const historyDays = parseInt(localStorage.getItem('historyDays') || '30');
+    const historyLimit = parseInt(localStorage.getItem('historyLimit') || '50');
+    const now = Date.now();
+    const cutoffTime = now - (historyDays * 24 * 60 * 60 * 1000);
+    
+    // 过滤掉过期的记录
+    const filteredHistory = history.filter(item => {
+        return item.timestamp > cutoffTime;
+    });
+    
+    // 限制记录数量
+    const limitedHistory = filteredHistory.slice(-historyLimit);
+    
+    // 更新历史记录
+    history = limitedHistory;
+    localStorage.setItem('chat_history', JSON.stringify(history));
+}
+
+// 更新首页指令入口按钮的显示状态
+function updatePromptEntryButton() {
+    const showPromptEntry = config.get('show_prompt_entry', 'true') === 'true';
+    const promptEntryButton = document.getElementById('promptEntryButton');
+    if (promptEntryButton) {
+        promptEntryButton.style.display = showPromptEntry ? 'flex' : 'none';
+    }
+}
+
+// 打开系统指令查看/编辑页面
+function openPromptViewer() {
+    const overlay = document.getElementById('promptViewerOverlay');
+    const container = document.getElementById('promptViewerContainer');
+    
+    if (overlay && container) {
+        overlay.classList.add('active');
+        container.classList.add('active');
+        
+        // 生成默认系统指令
+        try {
+            const defaultPrompt = promptBuilder.buildSystemPrompt();
+            document.getElementById('promptTextarea').value = defaultPrompt;
+        } catch (error) {
+            console.error('生成系统指令失败:', error);
+            document.getElementById('promptTextarea').value = '生成系统指令失败，请检查配置';
+        }
+    }
+}
+
+// 关闭系统指令查看/编辑页面
+function closePromptViewer() {
+    const overlay = document.getElementById('promptViewerOverlay');
+    const container = document.getElementById('promptViewerContainer');
+    
+    if (overlay && container) {
+        overlay.classList.remove('active');
+        container.classList.remove('active');
+    }
+}
+
+// 复制系统指令
+function copyPrompt() {
+    const promptText = document.getElementById('promptTextarea').value;
+    navigator.clipboard.writeText(promptText)
+        .then(() => {
+            showToast('已复制系统指令');
+        })
+        .catch(err => {
+            showToast('复制失败，请手动复制');
+        });
+}
+
+// 恢复默认系统指令
+function restoreDefaultPrompt() {
+    if (confirm('恢复为默认系统指令？当前编辑内容将丢失。')) {
+        const defaultPrompt = promptBuilder.buildSystemPrompt();
+        document.getElementById('promptTextarea').value = defaultPrompt;
+        showToast('已恢复默认系统指令');
+    }
+}
+
+// 使用编辑后的系统指令重新生成内容
+async function regenerateWithPrompt() {
+    const userInput = document.getElementById('userInput').value.trim();
+    if (!userInput) {
+        showToast('请先在输入框中输入内容');
+        return;
+    }
+    
+    const customPrompt = document.getElementById('promptTextarea').value.trim();
+    if (!customPrompt) {
+        showToast('系统指令不能为空');
+        return;
+    }
+    
+    // 检查API配置
+    if (!checkApiConfig()) {
+        showToast('请先配置AI服务商');
+        return;
+    }
+    
+    showLoading('正在生成...');
+    
+    try {
+        const response = await callAPI(userInput, customPrompt);
+        if (response.success) {
+            const sentences = parseSentences(response.content);
+            addToHistory(userInput, sentences, currentMode, selectedStyle || '');
+            renderHistory();
+            hideLoading();
+            showToast('生成成功');
+            closePromptViewer();
+        } else {
+            hideLoading();
+            showToast('生成失败: ' + response.error);
+        }
+    } catch (error) {
+        hideLoading();
+        showToast('生成失败: ' + error.message);
+    }
+}
+
+
 
 // WebDAV 同步相关变量
 let syncIntervalId = null;
@@ -1600,11 +1898,14 @@ function restoreFromWebDav() {
             localStorage.setItem('chat_history', JSON.stringify(data.chat_history));
         }
         if (data.ai_providers) {
-            localStorage.setItem('ai_providers', JSON.stringify(data.ai_providers));
-        }
-        if (data.active_provider) {
-            localStorage.setItem('active_provider', data.active_provider);
-        }
+                localStorage.setItem('ai_providers', JSON.stringify(data.ai_providers));
+                CONFIG.providers = data.ai_providers;
+            }
+            
+            if (data.active_provider) {
+                localStorage.setItem('active_provider', data.active_provider);
+                CONFIG.activeProvider = data.active_provider;
+            }
         if (data.settings) {
             Object.entries(data.settings).forEach(([key, value]) => {
                 if (value !== null && value !== undefined) {
@@ -1648,16 +1949,20 @@ function initWebDavSettings() {
 
 // ========== 服务商管理 ==========
 function renderProviders() {
+    // 每次渲染前重新从localStorage加载最新配置，解决多设备访问问题
+    const providers = JSON.parse(localStorage.getItem('ai_providers') || '[]');
+    const activeProviderId = localStorage.getItem('active_provider') || null;
+    
     const list = document.getElementById('providerList');
-    if (CONFIG.providers.length === 0) {
+    if (providers.length === 0) {
         list.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:30px;font-size:14px;">暂无配置的服务商<br><span style="font-size:12px;opacity:0.7;">点击下方添加第一个AI服务商</span></div>';
         return;
     }
     
-    list.innerHTML = CONFIG.providers.map(p => {
+    list.innerHTML = providers.map(p => {
         const enabledModels = p.models?.filter(m => m.enabled) || [];
         const defaultModel = p.models?.find(m => m.isDefault && m.enabled) || enabledModels[0];
-        const isActive = CONFIG.activeProvider === p.id;
+        const isActive = activeProviderId === p.id;
         const isDisabled = p.enabled === false;
         
         return `
@@ -1680,17 +1985,6 @@ function renderProviders() {
 // ... [保留原有的服务商管理函数] ...
 
 // ========== 内容生成 ==========
-async function handleGenerate() {
-    const input = document.getElementById('userInput').value.trim();
-    if (currentMode === 'love') {
-        if (!input) { showToast('请选择场景或输入内容'); return; }
-        generateLoveContent('general', input);
-    } else {
-        if (!input) { showToast('请输入内容'); return; }
-        if (!selectedStyle) { showToast('请先选择风格'); return; }
-        generateStyledContent(input, selectedStyle, currentMode);
-    }
-}
 
 async function generateLoveContent(sceneType, customContext = '') {
     if (isGenerating) return;
@@ -1765,7 +2059,11 @@ async function generateStyledContent(userInput, styleId, mode) {
 }
 
 async function callAPI(userContent, systemContent = null) {
-    const provider = CONFIG.providers.find(p => p.id === CONFIG.activeProvider);
+    // 每次调用前重新从localStorage加载最新配置，解决多设备访问问题
+    const providers = JSON.parse(localStorage.getItem('ai_providers') || '[]');
+    const activeProviderId = localStorage.getItem('active_provider') || null;
+    
+    const provider = providers.find(p => p.id === activeProviderId);
     if (!provider) throw new Error('请先配置AI服务商');
     
     const enabledModels = provider.models?.filter(m => m.enabled) || [];
@@ -1802,13 +2100,30 @@ async function callAPI(userContent, systemContent = null) {
         });
     }
     
-    const response = await fetch(endpoint, { 
-        method: 'POST', 
-        headers, 
-        body
-    });
+    console.log('API 请求信息:');
+    console.log('Endpoint:', endpoint);
+    console.log('Headers:', headers);
+    console.log('Body:', JSON.parse(body));
+    
+    let response;
+    try {
+        response = await fetch(endpoint, { 
+            method: 'POST', 
+            headers, 
+            body
+        });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        console.log('API 响应状态:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API 错误响应:', errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+    } catch (error) {
+        console.error('Fetch 请求失败:', error);
+        throw new Error(`网络请求失败: ${error.message}`);
+    }
     
     let content;
     try {
@@ -2121,3 +2436,454 @@ function showToast(message) {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2000);
 }
+
+// ========== 多对象管理功能 ==========
+
+// 长按检测
+function startLongPress(event) {
+    longPressTimer = setTimeout(() => {
+        openObjectDetail();
+    }, LONG_PRESS_DELAY);
+}
+
+function endLongPress() {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+}
+
+// 切换对象抽屉
+function openObjectSwitcher() {
+    document.getElementById('objectSwitcherOverlay').classList.add('active');
+    renderObjectsList();
+}
+
+function closeObjectSwitcher() {
+    document.getElementById('objectSwitcherOverlay').classList.remove('active');
+}
+
+// 添加对象
+function openAddObject() {
+    document.getElementById('addObjectOverlay').classList.add('active');
+}
+
+function closeAddObject() {
+    document.getElementById('addObjectOverlay').classList.remove('active');
+}
+
+function saveObject() {
+    const letter = document.getElementById('newObjectLetter').value;
+    const dot = document.querySelector('input[name="newObjectDot"]:checked').value;
+    const features = document.getElementById('newObjectFeatures').value;
+
+    // 检查是否已存在相同字母的对象
+    const existingIndex = objects.findIndex(obj => obj.letter === letter);
+    if (existingIndex !== -1) {
+        showToast('该对象标识已存在');
+        return;
+    }
+
+    const newObject = {
+        letter,
+        dot,
+        features,
+        memory: '',
+        relationshipStage: 'global',
+        customIntimacy: false,
+        intimacy: 5,
+        customSweetness: false,
+        sweetness: 50,
+        conversation: []
+    };
+
+    objects.push(newObject);
+    localStorage.setItem('objects', JSON.stringify(objects));
+    currentObject = letter;
+    localStorage.setItem('currentObject', letter);
+    updateObjectIndicator();
+    closeAddObject();
+    showToast('对象添加成功');
+}
+
+// 渲染对象列表
+function renderObjectsList() {
+    const objectsList = document.getElementById('objectsList');
+    
+    if (objects.length === 0) {
+        objectsList.innerHTML = `
+            <div style="text-align:center;color:var(--text-secondary);padding:30px;font-size:14px;">
+                暂无对象<br><span style="font-size:12px;opacity:0.7;">点击上方添加第一个对象</span>
+            </div>
+        `;
+        return;
+    }
+
+    objectsList.innerHTML = objects.map(obj => `
+        <div class="model-list-item">
+            <div class="model-info">
+                <div class="model-name">${obj.letter}. ${obj.dot}</div>
+                <div class="model-id">${obj.features || '无特征'}</div>
+            </div>
+            <div class="model-actions">
+                <button class="model-btn" onclick="selectObject('${obj.letter}')">选择</button>
+                <button class="model-btn" onclick="openObjectDetail('${obj.letter}')">编辑</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 选择对象
+function selectObject(letter) {
+    currentObject = letter;
+    localStorage.setItem('currentObject', letter);
+    updateObjectIndicator();
+    closeObjectSwitcher();
+    showToast('对象已切换');
+}
+
+// 清空所有对象
+function clearAllObjects() {
+    if (confirm('确定清空所有对象数据？此操作不可恢复！')) {
+        objects = [];
+        localStorage.setItem('objects', '[]');
+        currentObject = 'A';
+        localStorage.setItem('currentObject', 'A');
+        updateObjectIndicator();
+        renderObjectsList();
+        showToast('所有对象已清空');
+    }
+}
+
+// 对象详情管理
+function openObjectDetail(letter = currentObject) {
+    const obj = objects.find(o => o.letter === letter);
+    if (!obj) return;
+
+    document.getElementById('objectDetailPage').style.display = 'flex';
+    document.getElementById('detailObjectLetter').textContent = obj.letter;
+    document.getElementById('detailObjectDot').textContent = obj.dot;
+    document.getElementById('detailObjectFeatures').value = obj.features || '';
+    document.getElementById('detailObjectMemory').value = obj.memory || '';
+
+    // 选中对应的颜色点
+    document.querySelectorAll('input[name="detailObjectDot"]').forEach(radio => {
+        radio.checked = radio.value === obj.dot;
+    });
+
+    // 设置专属调整
+    document.getElementById('customIntimacy').checked = obj.customIntimacy;
+    document.getElementById('objectIntimacyRange').value = obj.intimacy || 5;
+    document.getElementById('objectIntimacyValue').textContent = obj.intimacy || 5;
+    document.getElementById('customSweetness').checked = obj.customSweetness;
+    document.getElementById('objectSweetnessRange').value = obj.sweetness || 50;
+    document.getElementById('objectSweetnessValue').textContent = (obj.sweetness || 50) + '%';
+
+    // 更新滑块状态
+    updateSliderStates();
+
+    // 渲染对话记录
+    renderConversationFlow(obj.conversation);
+}
+
+function closeObjectDetail() {
+    // 保存对象详情
+    saveObjectDetail();
+    document.getElementById('objectDetailPage').style.display = 'none';
+}
+
+function saveObjectDetail() {
+    const obj = objects.find(o => o.letter === currentObject);
+    if (!obj) return;
+
+    obj.features = document.getElementById('detailObjectFeatures').value;
+    obj.memory = document.getElementById('detailObjectMemory').value;
+    obj.dot = document.querySelector('input[name="detailObjectDot"]:checked').value;
+    obj.customIntimacy = document.getElementById('customIntimacy').checked;
+    obj.intimacy = parseInt(document.getElementById('objectIntimacyRange').value);
+    obj.customSweetness = document.getElementById('customSweetness').checked;
+    obj.sweetness = parseInt(document.getElementById('objectSweetnessRange').value);
+
+    localStorage.setItem('objects', JSON.stringify(objects));
+    updateObjectIndicator();
+}
+
+// 切换专属设置
+function toggleExclusiveSettings() {
+    const exclusiveSettings = document.getElementById('exclusiveSettings');
+    const toggleIcon = document.getElementById('exclusiveSettingsToggle');
+    
+    if (exclusiveSettings.style.display === 'none') {
+        exclusiveSettings.style.display = 'block';
+        toggleIcon.classList.add('rotated');
+    } else {
+        exclusiveSettings.style.display = 'none';
+        toggleIcon.classList.remove('rotated');
+    }
+}
+
+// 从剪贴板提取
+function extractFromClipboard() {
+    navigator.clipboard.readText().then(text => {
+        if (text) {
+            const obj = objects.find(o => o.letter === currentObject);
+            if (obj) {
+                obj.conversation.push({
+                    author: '对方',
+                    text: text,
+                    timestamp: Date.now()
+                });
+                localStorage.setItem('objects', JSON.stringify(objects));
+                renderConversationFlow(obj.conversation);
+                showToast('已从剪贴板提取内容');
+            }
+        }
+    }).catch(err => {
+        showToast('无法访问剪贴板');
+    });
+}
+
+// 更新滑块状态
+function updateSliderStates() {
+    const customIntimacy = document.getElementById('customIntimacy').checked;
+    const intimacySliderWrapper = document.getElementById('intimacySliderWrapper');
+    const customSweetness = document.getElementById('customSweetness').checked;
+    const sweetnessSliderWrapper = document.getElementById('sweetnessSliderWrapper');
+
+    if (customIntimacy) {
+        intimacySliderWrapper.style.opacity = '1';
+        intimacySliderWrapper.style.pointerEvents = 'auto';
+    } else {
+        intimacySliderWrapper.style.opacity = '0.5';
+        intimacySliderWrapper.style.pointerEvents = 'none';
+    }
+
+    if (customSweetness) {
+        sweetnessSliderWrapper.style.opacity = '1';
+        sweetnessSliderWrapper.style.pointerEvents = 'auto';
+    } else {
+        sweetnessSliderWrapper.style.opacity = '0.5';
+        sweetnessSliderWrapper.style.pointerEvents = 'none';
+    }
+}
+
+// 渲染对话记录
+function renderConversationFlow(conversation) {
+    const conversationFlow = document.getElementById('conversationFlow');
+    
+    if (conversation.length === 0) {
+        conversationFlow.innerHTML = `
+            <div style="text-align:center;color:var(--text-secondary);padding:30px;font-size:14px;">
+                暂无对话记录<br><span style="font-size:12px;opacity:0.7;">开始与对方聊天吧</span>
+            </div>
+        `;
+        return;
+    }
+
+    conversationFlow.innerHTML = conversation.map((item, index) => `
+        <div class="conversation-item" draggable="true" ondragover="event.preventDefault()" ondrop="dropConversationItem(event, ${index})" ondragstart="dragConversationItem(event, ${index})"><div class="drag-handle">☰</div><div class="conversation-content"><div class="conversation-author">${item.author}</div><div class="conversation-text" ondblclick="editConversationItem(${index})">${item.text}</div></div><div class="conversation-actions"><button class="delete-btn" onclick="deleteConversationItem(${index})">🗑</button></div></div>
+    `).join('');
+}
+
+// 拖拽排序
+let draggedItemIndex = -1;
+
+function dragConversationItem(event, index) {
+    draggedItemIndex = index;
+    event.target.style.opacity = '0.5';
+}
+
+function dropConversationItem(event, targetIndex) {
+    event.preventDefault();
+    const obj = objects.find(o => o.letter === currentObject);
+    if (!obj || draggedItemIndex === -1) return;
+
+    const draggedItem = obj.conversation.splice(draggedItemIndex, 1)[0];
+    obj.conversation.splice(targetIndex, 0, draggedItem);
+    localStorage.setItem('objects', JSON.stringify(objects));
+    renderConversationFlow(obj.conversation);
+    event.target.style.opacity = '1';
+    draggedItemIndex = -1;
+}
+
+// 编辑对话记录
+function editConversationItem(index) {
+    const obj = objects.find(o => o.letter === currentObject);
+    if (!obj) return;
+
+    const item = obj.conversation[index];
+    const textElement = event.target;
+    const originalText = item.text;
+
+    textElement.innerHTML = `<input type="text" value="${escapeHtml(originalText)}" class="form-input" style="width:100%;" onblur="saveConversationItem(${index}, this.value)" onkeypress="if(event.key === 'Enter') saveConversationItem(${index}, this.value)">`;
+    textElement.querySelector('input').focus();
+}
+
+function saveConversationItem(index, value) {
+    const obj = objects.find(o => o.letter === currentObject);
+    if (!obj) return;
+
+    obj.conversation[index].text = value;
+    localStorage.setItem('objects', JSON.stringify(objects));
+    renderConversationFlow(obj.conversation);
+}
+
+function deleteConversationItem(index) {
+    const obj = objects.find(o => o.letter === currentObject);
+    if (!obj) return;
+
+    if (confirm('确定删除这条记录？')) {
+        obj.conversation.splice(index, 1);
+        localStorage.setItem('objects', JSON.stringify(objects));
+        renderConversationFlow(obj.conversation);
+    }
+}
+
+// 更新对象标识
+function updateObjectIndicator() {
+    const obj = objects.find(o => o.letter === currentObject);
+    if (obj) {
+        document.querySelector('.object-letter').textContent = obj.letter;
+        document.querySelector('.object-dot').textContent = obj.dot;
+    }
+}
+
+// 输入框符号分割处理
+function handleGenerate() {
+    const input = document.getElementById('userInput').value.trim();
+    if (!input) return;
+
+    // 处理符号分割
+    const obj = objects.find(o => o.letter === currentObject) || {
+        letter: currentObject,
+        dot: '🔵',
+        features: '',
+        memory: '',
+        conversation: []
+    };
+
+    // 只有使用特殊符号分割的对话才添加到原始对话记录中
+    let hasSymbolInput = false;
+    
+    // 检查是否包含多个符号分割
+    if (input.includes('> ') && input.includes('@ ')) {
+        // 分割为多个部分
+        const parts = input.split(/(> |@ )/).filter(Boolean);
+        for (let i = 0; i < parts.length; i += 2) {
+            const symbol = parts[i];
+            const text = parts[i + 1] || '';
+            if (symbol === '> ') {
+                // 对方说的话
+                obj.conversation.push({
+                    author: '对方',
+                    text: text,
+                    timestamp: Date.now()
+                });
+                hasSymbolInput = true;
+            } else if (symbol === '@ ') {
+                // 我的回复
+                obj.conversation.push({
+                    author: '我',
+                    text: text,
+                    timestamp: Date.now()
+                });
+                hasSymbolInput = true;
+            }
+        }
+    } else if (input.startsWith('> ')) {
+        // 对方说的话
+        const text = input.substring(2);
+        obj.conversation.push({
+            author: '对方',
+            text: text,
+            timestamp: Date.now()
+        });
+        hasSymbolInput = true;
+    } else if (input.startsWith('@ ')) {
+        // 我的回复
+        const text = input.substring(2);
+        obj.conversation.push({
+            author: '我',
+            text: text,
+            timestamp: Date.now()
+        });
+        hasSymbolInput = true;
+    }
+
+    // 只有在使用符号分割时才保存对话记录
+    if (hasSymbolInput) {
+        // 保存对话记录
+        const existingIndex = objects.findIndex(o => o.letter === currentObject);
+        if (existingIndex !== -1) {
+            objects[existingIndex] = obj;
+        } else {
+            objects.push(obj);
+        }
+        localStorage.setItem('objects', JSON.stringify(objects));
+    }
+
+    // 继续原来的生成逻辑
+    if (currentMode === 'express' || currentMode === 'reply') {
+        if (selectedStyle) {
+            generateStyledContent(input, selectedStyle, currentMode);
+        } else {
+            showToast('请选择一个风格');
+        }
+    } else if (currentMode === 'love') {
+        generateLoveContent('custom', input);
+    }
+    
+    // 只有在使用符号分割时才清空输入框
+    if (input.startsWith('> ') || input.startsWith('@ ') || (input.includes('> ') && input.includes('@ '))) {
+        document.getElementById('userInput').value = '';
+    }
+}
+
+// 初始化
+function initObjects() {
+    // 检查是否有默认对象
+    if (objects.length === 0) {
+        const defaultObject = {
+            letter: 'A',
+            dot: '🔵',
+            features: '',
+            memory: '',
+            relationshipStage: 'global',
+            customIntimacy: false,
+            intimacy: 5,
+            customSweetness: false,
+            sweetness: 50,
+            conversation: []
+        };
+        objects.push(defaultObject);
+        localStorage.setItem('objects', JSON.stringify(objects));
+    }
+    updateObjectIndicator();
+}
+
+// 添加模型输入框
+function addModelInput() {
+    const modelsList = document.getElementById('providerModelsList');
+    const modelItem = document.createElement('div');
+    modelItem.className = 'model-input-item';
+    modelItem.innerHTML = `
+        <input type="text" placeholder="模型名称" class="form-input">
+        <input type="text" placeholder="模型ID" class="form-input">
+        <button class="remove-btn" onclick="removeModelInput(this)">×</button>
+    `;
+    modelsList.appendChild(modelItem);
+}
+
+// 移除模型输入框
+function removeModelInput(button) {
+    const modelItem = button.parentElement;
+    modelItem.remove();
+}
+
+// 页面加载完成后初始化
+window.onload = function() {
+    initObjects();
+    // 绑定事件
+    document.getElementById('customIntimacy').addEventListener('change', updateSliderStates);
+    document.getElementById('customSweetness').addEventListener('change', updateSliderStates);
+};

@@ -17,6 +17,11 @@
                 <span>小七</span>
             </div>
             <div class="header-actions">
+                <button class="icon-btn" id="promptEntryButton" onclick="openPromptViewer()" title="查看系统指令">📨</button>
+                <div class="object-indicator" id="objectIndicator" onclick="openObjectSwitcher()" onmousedown="startLongPress(event)" onmouseup="endLongPress()" ontouchstart="startLongPress(event)" ontouchend="endLongPress()" title="点击切换对象，长按进入详情">
+                    <span class="object-letter">A</span>
+                    <span class="object-dot">🔵</span>
+                </div>
                 <button class="icon-btn" onclick="clearHistory()" title="清空历史">✕</button>
             </div>
         </header>
@@ -168,7 +173,7 @@
 
             <!-- 输入框 -->
             <div class="input-container">
-                <input type="text" class="text-input" id="userInput" placeholder="选择模式后开始使用..." maxlength="300">
+                <input type="text" class="text-input" id="userInput" placeholder=">对方@我" maxlength="300">
                 <button class="input-action" onclick="handleVoiceInput()" title="语音输入">🎤</button>
                 <button class="input-action send" onclick="handleGenerate()" title="生成">↑</button>
             </div>
@@ -368,6 +373,10 @@
                             <option value="high">创意</option>
                         </select>
                     </div>
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="showPromptEntry">
+                        <span>显示系统指令入口</span>
+                    </div>
                     <div class="form-group">
                         <label class="form-label">每次生成数量</label>
                         <div style="display:flex;align-items:center;gap:12px;">
@@ -413,38 +422,24 @@
 
                 <!-- 数据同步 -->
                 <div class="settings-panel" id="panel-sync">
-                    <div class="panel-title">数据同步 (WebDAV)</div>
+                    <div class="panel-title">数据同步 (NebDAV)</div>
                     <div class="form-group">
                         <label class="form-label">服务器地址</label>
-                        <input type="text" class="form-input" id="webDavUrl" placeholder="https://your-dav-server.com/remote.php/dav/files/yourusername/">
+                        <input type="text" class="form-input" id="nebDavUrl" placeholder="https://your-dav-server.com">
                     </div>
                     <div class="form-group">
                         <label class="form-label">用户名</label>
-                        <input type="text" class="form-input" id="webDavUser" placeholder="用户名">
+                        <input type="text" class="form-input" id="nebDavUser" placeholder="用户名">
                     </div>
                     <div class="form-group">
                         <label class="form-label">密码</label>
-                        <input type="password" class="form-input" id="webDavPass" placeholder="密码">
+                        <input type="password" class="form-input" id="nebDavPass" placeholder="密码">
                     </div>
                     <div class="form-checkbox">
-                        <input type="checkbox" id="webDavEnable">
+                        <input type="checkbox" id="nebDavEnable">
                         <span>启用自动同步</span>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">同步频率</label>
-                        <select class="form-select" id="webDavInterval">
-                            <option value="300000">5分钟</option>
-                            <option value="600000">10分钟</option>
-                            <option value="1800000" selected>30分钟</option>
-                            <option value="3600000">1小时</option>
-                        </select>
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick="syncNow()">立即同步</button>
-                        <button class="btn btn-secondary" onclick="restoreFromWebDav()">恢复数据</button>
-                        <button class="btn btn-primary" onclick="saveSync()">保存设置</button>
-                    </div>
-                    <div class="sync-status" id="syncStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary);"></div>
+                    <button class="btn btn-primary" onclick="saveSync()">保存设置</button>
                 </div>
 
                 <!-- 历史管理 -->
@@ -452,7 +447,7 @@
                     <div class="panel-title">历史管理</div>
                     <div class="form-group">
                         <label class="form-label">保留天数</label>
-                        <select class="form-select">
+                        <select class="form-select" id="historyDays">
                             <option value="7">7天</option>
                             <option value="30" selected>30天</option>
                             <option value="90">90天</option>
@@ -461,7 +456,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label">最大条数</label>
-                        <select class="form-select">
+                        <select class="form-select" id="historyLimit">
                             <option value="50" selected>50条</option>
                             <option value="100">100条</option>
                             <option value="200">200条</option>
@@ -471,6 +466,7 @@
                         <button class="btn btn-secondary" onclick="exportHistory()">导出</button>
                         <button class="btn btn-danger" onclick="clearAllHistory()">清空</button>
                     </div>
+                    <button class="btn btn-primary" onclick="saveHistory()">保存设置</button>
                 </div>
             </div>
         </div>
@@ -528,19 +524,11 @@
                     </div>
                     
                     <div class="panel-title" style="margin-top:16px;">模型列表</div>
-                    <div class="model-list-container" id="providerModelsList">
-                        <div class="model-list-header">
-                            <div class="model-col-radio"></div>
-                            <div class="model-col-name">模型名称</div>
-                            <div class="model-col-context">上下文长度</div>
-                            <div class="model-col-status">状态</div>
-                            <div class="model-col-actions">操作</div>
-                        </div>
-                        <div class="model-list-body" id="modelListBody"></div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <button class="btn btn-secondary" onclick="fetchModels()" style="flex: 1;">🔄 获取模型列表</button>
+                        <button class="btn btn-secondary" onclick="addModelInput()" style="width: 40px;">+</button>
                     </div>
-                    <div class="model-list-actions">
-                        <button class="btn btn-secondary btn-sm" onclick="addNewModel()">+ 添加模型</button>
-                    </div>
+                    <div id="providerModelsList"></div>
                 </div>
 
                 <button class="btn btn-primary" onclick="saveProvider()" style="margin-top:16px;width:100%;">保存服务商</button>
@@ -563,6 +551,245 @@
     <!-- Toast -->
     <div class="toast" id="toast"></div>
 
+    <!-- 切换对象抽屉 -->
+    <div class="settings-overlay" id="objectSwitcherOverlay" onclick="closeObjectSwitcher()">
+        <div class="settings-drawer" onclick="event.stopPropagation()">
+            <div class="drawer-handle"></div>
+            <div class="drawer-header">
+                <h3 class="drawer-title">切换对象</h3>
+                <button class="drawer-close" onclick="closeObjectSwitcher()">✕</button>
+                <button class="btn btn-sm btn-primary" onclick="openAddObject()" style="margin-left: auto;">+ 新增</button>
+            </div>
+            <div class="settings-body">
+                <div id="objectsList" style="margin-bottom: 20px;">
+                    <div style="text-align:center;color:var(--text-secondary);padding:30px;font-size:14px;">
+                        暂无对象<br><span style="font-size:12px;opacity:0.7;">点击上方添加第一个对象</span>
+                    </div>
+                </div>
+                <button class="btn btn-danger" onclick="clearAllObjects()" style="width:100%;">
+                    清空所有对象数据
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加对象抽屉 -->
+    <div class="settings-overlay" id="addObjectOverlay" onclick="closeAddObject()">
+        <div class="settings-drawer" onclick="event.stopPropagation()">
+            <div class="drawer-handle"></div>
+            <div class="drawer-header">
+                <h3 class="drawer-title">添加对象</h3>
+                <button class="drawer-close" onclick="closeAddObject()">✕</button>
+            </div>
+            <div class="settings-body">
+                <div class="form-group">
+                    <label class="form-label">对象标识</label>
+                    <select class="form-select" id="newObjectLetter">
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                        <option value="E">E</option>
+                        <option value="F">F</option>
+                        <option value="G">G</option>
+                        <option value="H">H</option>
+                        <option value="I">I</option>
+                        <option value="J">J</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">颜色点</label>
+                    <div class="color-dot-grid">
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🔴" checked>
+                            <span class="color-dot">🔴</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🟠">
+                            <span class="color-dot">🟠</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🟡">
+                            <span class="color-dot">🟡</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🟢">
+                            <span class="color-dot">🟢</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🔵">
+                            <span class="color-dot">🔵</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="newObjectDot" value="🟣">
+                            <span class="color-dot">🟣</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">对方特征</label>
+                    <input type="text" class="form-input" id="newObjectFeatures" placeholder="例如：讨厌油腻，喜欢被夸聪明">
+                </div>
+                <button class="btn btn-primary" onclick="saveObject()">保存对象</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 系统指令查看/编辑页面 -->
+    <div class="prompt-viewer-overlay" id="promptViewerOverlay" onclick="closePromptViewer()">
+        <div class="prompt-viewer-container" id="promptViewerContainer" onclick="event.stopPropagation()">
+            <div class="prompt-viewer-header">
+                <button class="icon-btn" onclick="closePromptViewer()">←</button>
+                <h2>当前提示词预览</h2>
+                <button class="icon-btn" onclick="copyPrompt()" title="复制系统指令">📋</button>
+            </div>
+            <div class="prompt-viewer-content">
+                <div class="prompt-info">
+                    以下是将发送给 AI 的完整系统指令，可编辑后重新生成
+                </div>
+                <div class="prompt-editor">
+                    <textarea class="prompt-textarea" id="promptTextarea" placeholder="系统指令将在此显示..."></textarea>
+                </div>
+            </div>
+            <div class="prompt-viewer-footer">
+                <button class="btn btn-secondary" onclick="restoreDefaultPrompt()">恢复默认</button>
+                <button class="btn btn-primary" onclick="regenerateWithPrompt()">重新生成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 对象详情管理页 -->
+    <div class="object-detail-page" id="objectDetailPage" style="display:none;">
+        <div class="object-detail-header">
+            <button class="back-btn" onclick="closeObjectDetail()">←</button>
+            <h2 class="object-detail-title">对象详情</h2>
+        </div>
+        <div class="object-detail-content">
+            <!-- 基础信息区 -->
+            <div class="object-info-section">
+                <div class="object-basic-info">
+                    <div class="object-identity">
+                        <span class="object-letter-detail" id="detailObjectLetter">A</span>
+                        <span class="object-dot-detail" id="detailObjectDot">🔵</span>
+                    </div>
+                    <div class="color-dot-selector" id="colorDotSelector">
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🔴">
+                            <span class="color-dot">🔴</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🟠">
+                            <span class="color-dot">🟠</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🟡">
+                            <span class="color-dot">🟡</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🟢">
+                            <span class="color-dot">🟢</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🔵">
+                            <span class="color-dot">🔵</span>
+                        </label>
+                        <label class="color-dot-option">
+                            <input type="radio" name="detailObjectDot" value="🟣">
+                            <span class="color-dot">🟣</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">对方特征</label>
+                    <input type="text" class="form-input" id="detailObjectFeatures" placeholder="例如：讨厌油腻，喜欢被夸聪明">
+                </div>
+            </div>
+
+            <!-- 记忆锚点区 -->
+            <div class="object-section">
+                <div class="section-header">
+                    <h3 class="section-title">记忆锚点</h3>
+                    <button class="btn btn-sm btn-secondary" onclick="extractFromClipboard()" title="从剪贴板提取">📎</button>
+                </div>
+                <textarea class="form-textarea" id="detailObjectMemory" placeholder="记录AI需长期记住的核心信息"></textarea>
+            </div>
+
+            <!-- 专属调整折叠区 -->
+            <div class="object-section">
+                <div class="section-header" onclick="toggleExclusiveSettings()">
+                    <h3 class="section-title">针对她的专属调整</h3>
+                    <span class="toggle-icon" id="exclusiveSettingsToggle">▼</span>
+                </div>
+                <div class="exclusive-settings" id="exclusiveSettings" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">关系阶段</label>
+                        <div class="relationship-selector">
+                            <div class="relationship-track">
+                                <div class="relationship-options" id="objectRelationshipOptions">
+                                    <div class="relationship-option" data-value="global">跟随全局设置</div>
+                                    <div class="relationship-option" data-value="emotional">高情商</div>
+                                    <div class="relationship-option" data-value="friend">朋友</div>
+                                    <div class="relationship-option" data-value="buddy">兄弟</div>
+                                    <div class="relationship-option" data-value="new">初识</div>
+                                    <div class="relationship-option" data-value="icebreak">破冰</div>
+                                    <div class="relationship-option" data-value="ambiguous">暧昧</div>
+                                    <div class="relationship-option" data-value="fwb">炮友</div>
+                                    <div class="relationship-option" data-value="hot">热恋</div>
+                                    <div class="relationship-option" data-value="conflict">矛盾</div>
+                                    <div class="relationship-option" data-value="recover">挽回</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="customIntimacy">
+                        <span>自定义亲密程度</span>
+                    </div>
+                    <div class="slider-wrapper" id="intimacySliderWrapper" style="opacity:0.5;pointer-events:none;">
+                        <div class="slider-label-row">
+                            <label class="form-label">亲密程度</label>
+                            <span class="slider-value" id="objectIntimacyValue">5</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="objectIntimacyRange" min="1" max="10" value="5" 
+                                class="slider-input"
+                                oninput="updateSliderValue('objectIntimacyRange', 'objectIntimacyValue', '')">
+                        </div>
+                    </div>
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="customSweetness">
+                        <span>自定义甜度百分比</span>
+                    </div>
+                    <div class="slider-wrapper" id="sweetnessSliderWrapper" style="opacity:0.5;pointer-events:none;">
+                        <div class="slider-label-row">
+                            <label class="form-label">甜度百分比</label>
+                            <span class="slider-value" id="objectSweetnessValue">50%</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="objectSweetnessRange" min="0" max="100" value="50" 
+                                class="slider-input"
+                                oninput="updateSliderValue('objectSweetnessRange', 'objectSweetnessValue', '%')">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原始对话记录流 -->
+            <div class="object-section">
+                <div class="section-header">
+                    <h3 class="section-title">原始对话记录</h3>
+                </div>
+                <div class="conversation-flow" id="conversationFlow">
+                    <div style="text-align:center;color:var(--text-secondary);padding:30px;font-size:14px;">
+                        暂无对话记录<br><span style="font-size:12px;opacity:0.7;">开始与对方聊天吧</span>
+                    </div>
+                </div>
+                <div class="conversation-hint">
+                    双击消息可编辑 · 按住 ☰ 拖动排序
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 引入外部 JavaScript 文件 -->
     <script src="script.js"></script>
