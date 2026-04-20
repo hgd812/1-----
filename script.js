@@ -752,10 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProviders();
     loadGenderSettings();
     loadProcessSettings();
-    initWebDavSettings();
-    // 渲染技法开关UI
     renderTechniqueSwitches();
-    // 初始化所有滑块
     initAllSliders();
     
     document.getElementById('userInput').addEventListener('keypress', (e) => {
@@ -821,14 +818,287 @@ function selectStyle(id) {
 function openSettings() {
     document.getElementById('settingsOverlay').classList.add('active');
     document.body.style.overflow = 'hidden';
-    
-    // 渲染调情技法开关
-    renderTechniqueSwitches();
+    loadAllSettings();
+}
+
+function switchSettingsTab(tabName) {
+    const tabIndex = { 'basic': 0, 'ai': 1, 'preference': 2 };
+    const currentIndex = tabIndex[tabName] || 0;
+
+    document.querySelectorAll('.settings-tab-card').forEach((card, i) => {
+        card.classList.toggle('active', i === currentIndex);
+    });
+    document.querySelectorAll('.settings-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === currentIndex);
+    });
+    document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.remove('active'));
+    document.getElementById('panel-' + tabName).classList.add('active');
 }
 
 function closeSettings() {
     document.getElementById('settingsOverlay').classList.remove('active');
     document.body.style.overflow = '';
+}
+
+function toggleExpand(element) {
+    const isExpanded = element.classList.contains('expanded');
+    element.classList.toggle('expanded');
+    element.setAttribute('data-expanded', !isExpanded);
+}
+
+function toggleTechnique(tag) {
+    tag.classList.toggle('selected');
+    event.stopPropagation();
+}
+
+function togglePlatform(tag) {
+    tag.classList.toggle('selected');
+    const platform = tag.dataset.platform;
+    const configItem = document.querySelector(`.api-config-item[data-platform="${platform}"]`);
+    const emptyState = document.getElementById('apiEmptyState');
+    if (configItem) {
+        configItem.style.display = tag.classList.contains('selected') ? 'block' : 'none';
+    }
+    const anySelected = document.querySelector('.platform-tag.selected');
+    if (emptyState) {
+        emptyState.style.display = anySelected ? 'none' : 'block';
+    }
+
+    const isSelected = tag.classList.contains('selected');
+    config.set(`platform_${platform}_selected`, isSelected ? 'true' : 'false');
+
+    if (isSelected) {
+        const urlInput = document.getElementById(`${platform}Url`);
+        const keyInput = document.getElementById(`${platform}Key`);
+        let provider = CONFIG.providers.find(p => p.platform === platform);
+        if (!provider) {
+            const platformInfo = PLATFORMS[platform];
+            const defaultModels = platformInfo?.models?.map((name, idx) => ({
+                name: name,
+                enabled: true,
+                isDefault: idx === 0
+            })) || [];
+
+            provider = {
+                id: 'provider_' + platform + '_' + Date.now(),
+                platform: platform,
+                name: platformInfo?.name || platform,
+                url: urlInput?.value || platformInfo?.defaultUrl || '',
+                key: keyInput?.value || '',
+                models: defaultModels
+            };
+            CONFIG.providers.push(provider);
+        }
+        if (!CONFIG.activeProvider) {
+            CONFIG.activeProvider = provider.id;
+            localStorage.setItem('active_provider', CONFIG.activeProvider);
+        }
+    } else {
+        CONFIG.providers = CONFIG.providers.filter(p => p.platform !== platform);
+        if (CONFIG.activeProvider) {
+            const activeProvider = CONFIG.providers.find(p => p.id === CONFIG.activeProvider);
+            if (!activeProvider && CONFIG.providers.length > 0) {
+                CONFIG.activeProvider = CONFIG.providers[0].id;
+                localStorage.setItem('active_provider', CONFIG.activeProvider);
+            }
+        }
+    }
+    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
+
+    renderModelList();
+
+    event.stopPropagation();
+}
+
+function stepperAdjust(type, delta) {
+    if (type === 'batchSize') {
+        const input = document.getElementById('batchSizeValue');
+        let value = parseInt(input.textContent) || 6;
+        value = Math.max(1, Math.min(20, value + delta));
+        input.textContent = value;
+    }
+}
+
+function toggleSwitch(id) {
+    const toggle = document.getElementById(id + 'Toggle');
+    const label = document.getElementById(id + 'Label');
+    if (toggle && label) {
+        label.textContent = toggle.checked ? '开' : '关';
+    }
+}
+
+function loadAllSettings() {
+    const myGender = config.get('my_gender', 'male');
+    const targetGender = config.get('target_gender', 'female');
+    const relationship = config.get('relationship_stage', 'emotional');
+    const intimacy = config.get('intimacy', '5');
+    const depth = config.get('depth', '5');
+    const sweetness = config.get('sweetness', '50');
+    const toneStrength = config.get('tone_strength', '5');
+    const humorLevel = config.get('humor_level', '3');
+    const contentLength = config.get('content_length', 'medium');
+    const creativity = config.get('creativity', 'medium');
+    const batchSize = config.get('batch_size', '6');
+    const autoEmoji = config.get('auto_emoji', 'false') === 'true';
+
+    document.getElementById('myGenderSelect').value = myGender;
+    document.getElementById('targetGenderSelect').value = targetGender;
+    document.getElementById('relationshipStageSelect').value = relationship;
+
+    document.getElementById('intimacyValue').textContent = intimacy;
+    document.getElementById('intimacyRange').value = intimacy;
+    document.getElementById('depthValue').textContent = depth;
+    document.getElementById('depthRange').value = depth;
+    document.getElementById('sweetnessValue').textContent = sweetness + '%';
+    document.getElementById('sweetnessRange').value = sweetness;
+    document.getElementById('toneStrengthValue').textContent = toneStrength;
+    document.getElementById('toneStrengthRange').value = toneStrength;
+    document.getElementById('humorLevelValue').textContent = humorLevel;
+    document.getElementById('humorLevelRange').value = humorLevel;
+
+    document.getElementById('lengthSelect').value = contentLength;
+    document.getElementById('creativitySelect').value = creativity;
+    document.getElementById('batchSizeValue').textContent = batchSize;
+
+    const emojiToggle = document.getElementById('autoEmojiToggle');
+    const emojiLabel = document.getElementById('autoEmojiLabel');
+    if (emojiToggle) emojiToggle.checked = autoEmoji;
+    if (emojiLabel) emojiLabel.textContent = autoEmoji ? '开' : '关';
+
+    document.querySelectorAll('.technique-tag').forEach(tag => {
+        const tech = tag.dataset.technique;
+        const key = `technique_${tech.replace(/-/g, '_')}`;
+        tag.classList.toggle('selected', config.get(key) === 'true');
+    });
+
+    renderModelList();
+
+    const savedProviders = localStorage.getItem('ai_providers');
+    if (savedProviders) {
+        CONFIG.providers = JSON.parse(savedProviders);
+    }
+    const savedActiveProvider = localStorage.getItem('active_provider');
+    if (savedActiveProvider) {
+        CONFIG.activeProvider = savedActiveProvider;
+    }
+
+    document.querySelectorAll('.platform-tag').forEach(tag => {
+        const platform = tag.dataset.platform;
+        const isSelected = config.get(`platform_${platform}_selected`) === 'true';
+        tag.classList.toggle('selected', isSelected);
+        const configItem = document.querySelector(`.api-config-item[data-platform="${platform}"]`);
+        if (configItem) {
+            configItem.style.display = isSelected ? 'block' : 'none';
+        }
+    });
+
+    const emptyState = document.getElementById('apiEmptyState');
+    if (emptyState) {
+        const anySelected = document.querySelector('.platform-tag.selected');
+        emptyState.style.display = anySelected ? 'none' : 'block';
+    }
+
+    CONFIG.providers.forEach(provider => {
+        if (provider.platform === 'openai') {
+            document.getElementById('openaiUrl').value = provider.url || '';
+            document.getElementById('openaiKey').value = provider.key || '';
+        } else if (provider.platform === 'claude') {
+            document.getElementById('claudeUrl').value = provider.url || '';
+            document.getElementById('claudeKey').value = provider.key || '';
+        } else if (provider.platform === 'deepseek') {
+            document.getElementById('deepseekUrl').value = provider.url || '';
+            document.getElementById('deepseekKey').value = provider.key || '';
+        } else if (provider.platform === 'kimi') {
+            document.getElementById('kimiUrl').value = provider.url || '';
+            document.getElementById('kimiKey').value = provider.key || '';
+        } else if (provider.platform === 'doubao') {
+            document.getElementById('doubaoUrl').value = provider.url || '';
+            document.getElementById('doubaoKey').value = provider.key || '';
+        } else if (provider.platform === 'qwen') {
+            document.getElementById('qwenUrl').value = provider.url || '';
+            document.getElementById('qwenKey').value = provider.key || '';
+        }
+    });
+}
+
+function saveAllSettings() {
+    const myGender = document.getElementById('myGenderSelect').value;
+    const targetGender = document.getElementById('targetGenderSelect').value;
+    const relationship = document.getElementById('relationshipStageSelect').value;
+    const intimacy = document.getElementById('intimacyRange').value;
+    const depth = document.getElementById('depthRange').value;
+    const sweetness = document.getElementById('sweetnessRange').value;
+    const toneStrength = document.getElementById('toneStrengthRange').value;
+    const humorLevel = document.getElementById('humorLevelRange').value;
+    const contentLength = document.getElementById('lengthSelect').value;
+    const creativity = document.getElementById('creativitySelect').value;
+    const batchSize = document.getElementById('batchSizeValue').textContent;
+    const autoEmoji = document.getElementById('autoEmojiToggle').checked;
+
+    config.set('my_gender', myGender);
+    config.set('target_gender', targetGender);
+    config.set('relationship_stage', relationship);
+    config.set('intimacy', intimacy);
+    config.set('depth', depth);
+    config.set('sweetness', sweetness);
+    config.set('tone_strength', toneStrength);
+    config.set('humor_level', humorLevel);
+    config.set('content_length', contentLength);
+    config.set('creativity', creativity);
+    config.set('batch_size', batchSize);
+    config.set('auto_emoji', autoEmoji ? 'true' : 'false');
+
+    document.querySelectorAll('.technique-tag.selected').forEach(tag => {
+        const tech = tag.dataset.technique;
+        const key = `technique_${tech.replace(/-/g, '_')}`;
+        config.set(key, 'true');
+    });
+
+    document.querySelectorAll('.technique-tag:not(.selected)').forEach(tag => {
+        const tech = tag.dataset.technique;
+        const key = `technique_${tech.replace(/-/g, '_')}`;
+        config.set(key, 'false');
+    });
+
+    document.querySelectorAll('.platform-tag').forEach(tag => {
+        const platform = tag.dataset.platform;
+        const isSelected = tag.classList.contains('selected');
+        config.set(`platform_${platform}_selected`, isSelected ? 'true' : 'false');
+
+        if (isSelected) {
+            const urlInput = document.getElementById(`${platform}Url`);
+            const keyInput = document.getElementById(`${platform}Key`);
+            let provider = CONFIG.providers.find(p => p.platform === platform);
+            if (!provider) {
+                const platformInfo = PLATFORMS[platform];
+                const defaultModels = platformInfo?.models?.map((name, idx) => ({
+                    name: name,
+                    enabled: true,
+                    isDefault: idx === 0
+                })) || [];
+
+                provider = {
+                    id: 'provider_' + platform + '_' + Date.now(),
+                    platform: platform,
+                    name: platformInfo?.name || platform,
+                    url: urlInput?.value || platformInfo?.defaultUrl || '',
+                    key: keyInput?.value || '',
+                    models: defaultModels
+                };
+                CONFIG.providers.push(provider);
+            } else {
+                provider.url = urlInput?.value || provider.url;
+                provider.key = keyInput?.value || provider.key;
+            }
+        } else {
+            CONFIG.providers = CONFIG.providers.filter(p => p.platform !== platform);
+        }
+    });
+
+    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
+
+    promptBuilder.refresh();
+    showToast('设置已保存');
 }
 
 function openAddProvider() {
@@ -935,61 +1205,90 @@ function getContextLength(modelName) {
 }
 
 function renderModelList() {
-    const body = document.getElementById('modelListBody');
-    if (!body) return;
-    
-    body.innerHTML = currentModels.map((model, index) => `
-        <div class="model-row" data-index="${index}">
-            <div class="model-col-radio">
-                <span class="model-radio ${model.isDefault ? 'selected' : ''}" onclick="setDefaultModel(${index})"></span>
+    const container = document.getElementById('modelListContainer');
+    if (!container) return;
+
+    const selectedPlatform = document.querySelector('.platform-tag.selected');
+    let models = [];
+
+    if (selectedPlatform) {
+        const platform = selectedPlatform.dataset.platform;
+        const provider = CONFIG.providers.find(p => p.platform === platform);
+        if (provider) {
+            models = provider.models || [];
+        }
+    }
+
+    container.innerHTML = models.map((model, index) => `
+        <div class="model-item" data-index="${index}">
+            <div class="model-info">
+                <span class="model-name">${model.name}</span>
+                ${model.isDefault ? '<span class="model-default-tag">默认</span>' : ''}
             </div>
-            <div class="model-col-name">
-                <input type="text" class="model-name-input" value="${model.name}" 
-                    onchange="updateModelName(${index}, this.value)" placeholder="输入模型名称">
-            </div>
-            <div class="model-col-context">${model.contextLength}</div>
-            <div class="model-col-status">
-                <span class="model-toggle ${model.enabled ? 'enabled' : ''}" onclick="toggleModel(${index})"></span>
-            </div>
-            <div class="model-col-actions">
+            <div class="model-actions">
+                <span class="model-default-btn ${model.isDefault ? 'active' : ''}" onclick="setDefaultModel(${index})">
+                    ${model.isDefault ? '★' : '☆'}
+                </span>
                 <span class="model-delete-btn" onclick="deleteModel(${index})">删除</span>
             </div>
         </div>
     `).join('');
 }
 
-function updateModelName(index, value) {
-    currentModels[index].name = value;
-}
-
-function addNewModel() {
-    const newModel = {
-        id: 'model_' + (++modelInputCount),
-        name: '',
-        contextLength: '128K',
-        enabled: true,
-        isDefault: currentModels.length === 0
-    };
-    currentModels.push(newModel);
-    renderModelList();
-}
-
 function setDefaultModel(index) {
-    currentModels.forEach((m, i) => m.isDefault = (i === index));
-    renderModelList();
-}
+    const selectedPlatform = document.querySelector('.platform-tag.selected');
+    if (!selectedPlatform) return;
 
-function toggleModel(index) {
-    currentModels[index].enabled = !currentModels[index].enabled;
+    const platform = selectedPlatform.dataset.platform;
+    const provider = CONFIG.providers.find(p => p.platform === platform);
+    if (!provider) return;
+
+    provider.models.forEach((m, i) => m.isDefault = (i === index));
+    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
     renderModelList();
 }
 
 function deleteModel(index) {
-    const wasDefault = currentModels[index].isDefault;
-    currentModels.splice(index, 1);
-    if (wasDefault && currentModels.length > 0) {
-        currentModels[0].isDefault = true;
+    const selectedPlatform = document.querySelector('.platform-tag.selected');
+    if (!selectedPlatform) return;
+
+    const platform = selectedPlatform.dataset.platform;
+    const provider = CONFIG.providers.find(p => p.platform === platform);
+    if (!provider) return;
+
+    const wasDefault = provider.models[index].isDefault;
+    provider.models.splice(index, 1);
+    if (wasDefault && provider.models.length > 0) {
+        provider.models[0].isDefault = true;
     }
+    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
+    renderModelList();
+}
+
+function addModel() {
+    const input = document.getElementById('newModelName');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) return;
+
+    const selectedPlatform = document.querySelector('.platform-tag.selected');
+    if (!selectedPlatform) {
+        showToast('请先选择服务商平台');
+        return;
+    }
+
+    const platform = selectedPlatform.dataset.platform;
+    const provider = CONFIG.providers.find(p => p.platform === platform);
+    if (!provider) return;
+
+    const newModel = {
+        name: name,
+        enabled: true,
+        isDefault: provider.models.length === 0
+    };
+    provider.models.push(newModel);
+    localStorage.setItem('ai_providers', JSON.stringify(CONFIG.providers));
+    input.value = '';
     renderModelList();
 }
 
@@ -1075,13 +1374,13 @@ function openProviderDetail(id) {
             <div style="font-size:12px;opacity:0.7;">${PLATFORMS[provider.platform]?.name || provider.platform}</div>
         </div>
         
-        <div class="form-group">
-            <label class="form-label">API 地址</label>
+        <div>
+            <label>API 地址</label>
             <div style="font-size:13px;word-break:break-all;">${provider.url}</div>
         </div>
         
-        <div class="form-group">
-            <label class="form-label">启用模型</label>
+        <div>
+            <label>启用模型</label>
             <div style="font-size:13px;">${enabledModels.map(m => m.name).join(', ') || '无'}</div>
         </div>
         
@@ -1120,18 +1419,6 @@ function deleteProvider(id) {
     renderProviders();
     closeProviderDetail();
     showToast('已删除服务商');
-}
-
-function switchTab(tab) {
-    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
-    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-    document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('panel-' + tab).classList.add('active');
-    
-    // 如果切换到基础标签，渲染技法开关
-    if (tab === 'basic') {
-        renderTechniqueSwitches();
-    }
 }
 
 function saveBasic() {
@@ -1442,211 +1729,6 @@ function loadProcessSettings() {
     document.getElementById('autoEmoji').checked = autoEmoji;
 }
 
-function saveSync() {
-    const webDavUrl = document.getElementById('webDavUrl').value;
-    const webDavUser = document.getElementById('webDavUser').value;
-    const webDavPass = document.getElementById('webDavPass').value;
-    const webDavEnable = document.getElementById('webDavEnable').checked;
-    const webDavInterval = document.getElementById('webDavInterval').value;
-    
-    localStorage.setItem('webDavUrl', webDavUrl);
-    localStorage.setItem('webDavUser', webDavUser);
-    localStorage.setItem('webDavPass', webDavPass);
-    localStorage.setItem('webDavEnable', webDavEnable);
-    localStorage.setItem('webDavInterval', webDavInterval);
-    
-    // 启动或停止自动同步
-    if (webDavEnable) {
-        startAutoSync();
-    } else {
-        stopAutoSync();
-    }
-    
-    showToast('同步设置已保存');
-}
-
-// WebDAV 同步相关变量
-let syncIntervalId = null;
-
-// 启动自动同步
-function startAutoSync() {
-    stopAutoSync(); // 先停止现有同步
-    
-    const interval = parseInt(localStorage.getItem('webDavInterval') || '1800000');
-    syncIntervalId = setInterval(syncNow, interval);
-}
-
-// 停止自动同步
-function stopAutoSync() {
-    if (syncIntervalId) {
-        clearInterval(syncIntervalId);
-        syncIntervalId = null;
-    }
-}
-
-// 立即同步
-function syncNow() {
-    const status = document.getElementById('syncStatus');
-    if (status) {
-        status.textContent = '正在同步...';
-        status.style.color = 'var(--primary)';
-    }
-    
-    // 准备同步数据
-    const syncData = {
-        chat_history: JSON.parse(localStorage.getItem('chat_history') || '[]'),
-        ai_providers: JSON.parse(localStorage.getItem('ai_providers') || '[]'),
-        active_provider: localStorage.getItem('active_provider'),
-        settings: {
-            my_gender: localStorage.getItem('my_gender'),
-            target_gender: localStorage.getItem('target_gender'),
-            relationship_stage: localStorage.getItem('relationship_stage'),
-            intimacy: localStorage.getItem('intimacy'),
-            depth: localStorage.getItem('depth'),
-            sweetness: localStorage.getItem('sweetness'),
-            tone_strength: localStorage.getItem('tone_strength'),
-            humor_level: localStorage.getItem('humor_level'),
-            content_length: localStorage.getItem('content_length'),
-            creativity: localStorage.getItem('creativity'),
-            batch_size: localStorage.getItem('batch_size'),
-            auto_emoji: localStorage.getItem('auto_emoji')
-        }
-    };
-    
-    const jsonData = JSON.stringify(syncData, null, 2);
-    
-    // 获取 WebDAV 配置
-    const url = localStorage.getItem('webDavUrl');
-    const user = localStorage.getItem('webDavUser');
-    const pass = localStorage.getItem('webDavPass');
-    
-    if (!url || !user || !pass) {
-        if (status) {
-            status.textContent = '请配置 WebDAV 服务器信息';
-            status.style.color = 'var(--error)';
-        }
-        return;
-    }
-    
-    // 构建 WebDAV 上传 URL
-    const syncFileUrl = url.endsWith('/') ? url + 'chat_sync.json' : url + '/chat_sync.json';
-    
-    // 上传数据到 WebDAV
-    fetch(syncFileUrl, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Basic ' + btoa(user + ':' + pass)
-        },
-        body: jsonData
-    })
-    .then(response => {
-        if (response.ok) {
-            if (status) {
-                status.textContent = '同步成功';
-                status.style.color = 'var(--success)';
-            }
-        } else {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-    })
-    .catch(error => {
-        console.error('WebDAV sync error:', error);
-        if (status) {
-            status.textContent = '同步失败: ' + error.message;
-            status.style.color = 'var(--error)';
-        }
-    });
-}
-
-// 从 WebDAV 恢复数据
-function restoreFromWebDav() {
-    const status = document.getElementById('syncStatus');
-    if (status) {
-        status.textContent = '正在恢复数据...';
-        status.style.color = 'var(--primary)';
-    }
-    
-    const url = localStorage.getItem('webDavUrl');
-    const user = localStorage.getItem('webDavUser');
-    const pass = localStorage.getItem('webDavPass');
-    
-    if (!url || !user || !pass) {
-        if (status) {
-            status.textContent = '请配置 WebDAV 服务器信息';
-            status.style.color = 'var(--error)';
-        }
-        return;
-    }
-    
-    const syncFileUrl = url.endsWith('/') ? url + 'chat_sync.json' : url + '/chat_sync.json';
-    
-    fetch(syncFileUrl, {
-        method: 'GET',
-        headers: {
-            'Authorization': 'Basic ' + btoa(user + ':' + pass)
-        }
-    })
-    .then(response => {
-        if (response.ok) {
-            return response.json();
-        } else {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-    })
-    .then(data => {
-        // 恢复数据
-        if (data.chat_history) {
-            localStorage.setItem('chat_history', JSON.stringify(data.chat_history));
-        }
-        if (data.ai_providers) {
-            localStorage.setItem('ai_providers', JSON.stringify(data.ai_providers));
-        }
-        if (data.active_provider) {
-            localStorage.setItem('active_provider', data.active_provider);
-        }
-        if (data.settings) {
-            Object.entries(data.settings).forEach(([key, value]) => {
-                if (value !== null && value !== undefined) {
-                    localStorage.setItem(key, value);
-                }
-            });
-        }
-        
-        if (status) {
-            status.textContent = '数据恢复成功';
-            status.style.color = 'var(--success)';
-        }
-        
-        // 刷新页面
-        setTimeout(() => {
-            location.reload();
-        }, 1000);
-    })
-    .catch(error => {
-        console.error('WebDAV restore error:', error);
-        if (status) {
-            status.textContent = '恢复失败: ' + error.message;
-            status.style.color = 'var(--error)';
-        }
-    });
-}
-
-// 初始化 WebDAV 设置
-function initWebDavSettings() {
-    document.getElementById('webDavUrl').value = localStorage.getItem('webDavUrl') || '';
-    document.getElementById('webDavUser').value = localStorage.getItem('webDavUser') || '';
-    document.getElementById('webDavPass').value = localStorage.getItem('webDavPass') || '';
-    document.getElementById('webDavEnable').checked = localStorage.getItem('webDavEnable') === 'true';
-    document.getElementById('webDavInterval').value = localStorage.getItem('webDavInterval') || '1800000';
-    
-    // 启动自动同步
-    if (localStorage.getItem('webDavEnable') === 'true') {
-        startAutoSync();
-    }
-}
-
-// ========== 服务商管理 ==========
 function renderProviders() {
     const list = document.getElementById('providerList');
     if (CONFIG.providers.length === 0) {
@@ -1675,9 +1757,6 @@ function renderProviders() {
         `;
     }).join('');
 }
-
-// 服务商详细功能（保留原有实现，与链式架构无关的部分略）
-// ... [保留原有的服务商管理函数] ...
 
 // ========== 内容生成 ==========
 async function handleGenerate() {
@@ -1994,7 +2073,6 @@ function checkApiConfig() {
     if (!CONFIG.activeProvider || CONFIG.providers.length === 0) {
         showToast('请先配置AI服务商');
         openSettings();
-        switchTab('ai');
         return false;
     }
     return true;
@@ -2051,24 +2129,10 @@ function clearHistory() {
     } 
 }
 
-function clearAllHistory() { 
-    if (confirm('确定清空所有历史？此操作不可恢复！')) { 
-        history = []; 
-        localStorage.setItem('chat_history', '[]'); 
-        renderHistory(); 
-        closeSettings(); 
-        showToast('历史已清空'); 
-    } 
-}
-
-function exportHistory() {
-    const blob = new Blob([JSON.stringify(history, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(blob);
-    a.download = `history_${new Date().toISOString().split('T')[0]}.json`;
-    a.click(); 
-    URL.revokeObjectURL(a.href);
-    showToast('历史已导出');
+function clearOutput() {
+    history = [];
+    localStorage.setItem('chat_history', '[]');
+    renderHistory();
 }
 
 function showLoading() {

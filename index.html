@@ -17,7 +17,7 @@
                 <span>小七</span>
             </div>
             <div class="header-actions">
-                <button class="icon-btn" onclick="clearHistory()" title="清空历史">✕</button>
+                <button class="icon-btn" onclick="clearOutput()" title="清空">🗑️</button>
             </div>
         </header>
 
@@ -179,297 +179,408 @@
     <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()">
         <div class="settings-drawer" onclick="event.stopPropagation()">
             <div class="drawer-handle"></div>
-            
-            <div class="drawer-header">
-                <h3 class="drawer-title">设置</h3>
-                <button class="drawer-close" onclick="closeSettings()">✕</button>
+
+            <div class="settings-header">
+                <button class="settings-back-btn" onclick="closeSettings()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 18l-6-6 6-6"/>
+                    </svg>
+                </button>
+                <h2 class="settings-title">设置</h2>
+                <div style="width:40px;"></div>
             </div>
 
-            <!-- 标签切换 -->
-            <div class="settings-tabs">
-                <div class="settings-tab active" onclick="switchTab('basic')" data-tab="basic">
-                    <span class="tab-icon">🏠</span><span>基础</span>
+            <div class="settings-tabs-container">
+                <div class="settings-tabs-track" id="settingsTabsTrack">
+                    <div class="settings-tab-card active" data-tab="basic" onclick="switchSettingsTab('basic')">
+                        <span class="tab-icon">👤</span>
+                        <span class="tab-label">基础信息</span>
+                    </div>
+                    <div class="settings-tab-card" data-tab="ai" onclick="switchSettingsTab('ai')">
+                        <span class="tab-icon">🤖</span>
+                        <span class="tab-label">AI模型</span>
+                    </div>
+                    <div class="settings-tab-card" data-tab="preference" onclick="switchSettingsTab('preference')">
+                        <span class="tab-icon">✨</span>
+                        <span class="tab-label">内容偏好</span>
+                    </div>
                 </div>
-                <div class="settings-tab" onclick="switchTab('ai')" data-tab="ai">
-                    <span class="tab-icon">🤖</span><span>AI服务</span>
-                </div>
-                <div class="settings-tab" onclick="switchTab('generate')" data-tab="generate">
-                    <span class="tab-icon">⚡</span><span>生成</span>
-                </div>
-                <div class="settings-tab" onclick="switchTab('process')" data-tab="process">
-                    <span class="tab-icon">🔧</span><span>处理</span>
-                </div>
-                <div class="settings-tab" onclick="switchTab('sync')" data-tab="sync">
-                    <span class="tab-icon">🔄</span><span>同步</span>
-                </div>
-                <div class="settings-tab" onclick="switchTab('history')" data-tab="history">
-                    <span class="tab-icon">📜</span><span>历史</span>
+                <div class="settings-dots">
+                    <span class="settings-dot active" data-index="0"></span>
+                    <span class="settings-dot" data-index="1"></span>
+                    <span class="settings-dot" data-index="2"></span>
                 </div>
             </div>
 
-            <!-- 内容 -->
-            <div class="settings-body">
-                <!-- 基础信息 -->
-                <div class="settings-panel active" id="panel-basic">
-                    <div class="panel-title">基础信息</div>
-                    <div class="form-group">
-                        <label class="form-label">应用名称</label>
-                        <input type="text" class="form-input" id="appName" placeholder="小七">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">默认语言</label>
-                        <select class="form-select">
-                            <option value="zh-CN" selected>中文（简体）</option>
-                            <option value="zh-TW">中文（繁体）</option>
-                            <option value="en">English</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">默认称呼</label>
-                        <input type="text" class="form-input" id="defaultName" placeholder="如：TA、小哥哥">
-                    </div>
-                    
-                    <!-- 性别信息设置 -->
-                    <div class="panel-title" style="margin-top: 20px; font-size: 14px; color: var(--text-secondary);">性别信息（用于生成适配性别的文案）</div>
-                    <div class="form-group">
-                        <label class="form-label">你的性别</label>
-                        <div class="radio-group">
-                            <label class="radio-label">
-                                <input type="radio" name="myGender" value="male" id="myGenderMale">
-                                <span>男生</span>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="myGender" value="female" id="myGenderFemale">
-                                <span>女生</span>
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">喜欢的对象</label>
-                        <div class="radio-group">
-                            <label class="radio-label">
-                                <input type="radio" name="targetGender" value="male" id="targetGenderMale">
-                                <span>男生</span>
-                            </label>
-                            <label class="radio-label">
-                                <input type="radio" name="targetGender" value="female" id="targetGenderFemale">
-                                <span>女生</span>
-                            </label>
-                        </div>
-                    </div>
-                    <!-- 调情技法开关 -->
-                    <div class="panel-title" style="margin-top: 24px; font-size: 14px; color: var(--text-secondary);">调情技法（开启后AI会在文案中应用相应技法）</div>
-                    <div id="techniqueSwitchesContainer"></div>
-                    <!-- 关系阶段选择 -->
-                    <div class="panel-title" style="margin-top: 20px; font-size: 14px; color: var(--text-secondary);">关系阶段（AI将根据此阶段调整文案风格）</div>
-                    <div class="relationship-selector">
-                        <div class="relationship-track" id="relationshipTrack">
-                            <div class="relationship-options" id="relationshipOptions">
-                                <div class="relationship-option" data-value="emotional">高情商</div>
-                                <div class="relationship-option" data-value="friend">朋友</div>
-                                <div class="relationship-option" data-value="buddy">兄弟</div>
-                                <div class="relationship-option" data-value="new">初识</div>
-                                <div class="relationship-option" data-value="icebreak">破冰</div>
-                                <div class="relationship-option" data-value="ambiguous">暧昧</div>
-                                <div class="relationship-option" data-value="fwb">炮友</div>
-                                <div class="relationship-option" data-value="hot">热恋</div>
-                                <div class="relationship-option" data-value="conflict">矛盾</div>
-                                <div class="relationship-option" data-value="recover">挽回</div>
+            <div class="settings-content" id="settingsContent">
+                <div class="settings-panel active" id="panel-basic" data-panel="basic">
+                    <div class="panel-section-title">基础信息</div>
+
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">⚧</span>
+                                <span class="settings-item-label">性别设置</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
                             </div>
                         </div>
-                        <div class="relationship-indicator" id="relationshipIndicator"></div>
-                    </div>
-                    <div class="relationship-hint" id="relationshipHint">高情商</div>
-                    
-                    <!-- 甜度控制 -->
-                    <div class="panel-title" style="margin-top: 24px; font-size: 14px; color: var(--text-secondary);">文案甜度控制</div>
-                    
-                    <div class="slider-wrapper">
-                        <div class="slider-label-row">
-                            <label class="form-label">亲密程度</label>
-                            <span class="slider-value" id="intimacyValue">5</span>
-                        </div>
-                        <div class="slider-container">
-                            <input type="range" id="intimacyRange" min="1" max="10" value="5" 
-                                class="slider-input"
-                                oninput="updateSliderValue('intimacyRange', 'intimacyValue', '')">
-                        </div>
-                        <div class="slider-hint">
-                            <span>含蓄</span>
-                            <span>亲密</span>
-                        </div>
-                    </div>
-                    
-                    <div class="slider-wrapper">
-                        <div class="slider-label-row">
-                            <label class="form-label">话题深度</label>
-                            <span class="slider-value" id="depthValue">5</span>
-                        </div>
-                        <div class="slider-container">
-                            <input type="range" id="depthRange" min="1" max="10" value="5" 
-                                class="slider-input"
-                                oninput="updateSliderValue('depthRange', 'depthValue', '')">
-                        </div>
-                        <div class="slider-hint">
-                            <span>轻松</span>
-                            <span>深入</span>
-                        </div>
-                    </div>
-                    
-                    <div class="slider-wrapper">
-                        <div class="slider-label-row">
-                            <label class="form-label">甜度百分比</label>
-                            <span class="slider-value" id="sweetnessValue">50%</span>
-                        </div>
-                        <div class="slider-container">
-                            <input type="range" id="sweetnessRange" min="0" max="100" value="50" 
-                                class="slider-input"
-                                oninput="updateSliderValue('sweetnessRange', 'sweetnessValue', '%')">
-                        </div>
-                        <div class="slider-hint">
-                            <span>平淡</span>
-                            <span>甜蜜</span>
+                        <div class="settings-item-body" onclick="event.stopPropagation()">
+                            <div class="form-group">
+                                <label class="form-label">我的性别</label>
+                                <select class="form-select" id="myGenderSelect">
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">目标性别</label>
+                                <select class="form-select" id="targetGenderSelect">
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                    <option value="any">不限</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">💫</span>
+                                <span class="settings-item-label">关系阶段</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <select class="form-select compact" id="relationshipStageSelect">
+                                    <option value="emotional">高情商</option>
+                                    <option value="friend">朋友</option>
+                                    <option value="buddy">兄弟</option>
+                                    <option value="new">初识</option>
+                                    <option value="icebreak">破冰</option>
+                                    <option value="ambiguous">暧昧</option>
+                                    <option value="fwb">炮友</option>
+                                    <option value="hot">热恋</option>
+                                    <option value="conflict">矛盾</option>
+                                    <option value="recover">挽回</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
 
-                    
-                    <button class="btn btn-primary" onclick="saveBasic()">保存设置</button>
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">🍯</span>
+                                <span class="settings-item-label">甜度控制</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
+                            </div>
+                        </div>
+                        <div class="settings-item-body" onclick="event.stopPropagation()">
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <span class="slider-label">亲密程度</span>
+                                    <span class="slider-value" id="intimacyValue">5</span>
+                                </div>
+                                <input type="range" class="slider-input gradient-slider" id="intimacyRange" min="1" max="10" value="5" oninput="updateSliderValue('intimacyRange', 'intimacyValue', '')">
+                                <div class="slider-scale"><span>含蓄</span><span>亲密</span></div>
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <span class="slider-label">话题深度</span>
+                                    <span class="slider-value" id="depthValue">5</span>
+                                </div>
+                                <input type="range" class="slider-input gradient-slider" id="depthRange" min="1" max="10" value="5" oninput="updateSliderValue('depthRange', 'depthValue', '')">
+                                <div class="slider-scale"><span>轻松</span><span>深入</span></div>
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <span class="slider-label">甜度百分比</span>
+                                    <span class="slider-value" id="sweetnessValue">50%</span>
+                                </div>
+                                <input type="range" class="slider-input gradient-slider" id="sweetnessRange" min="0" max="100" value="50" oninput="updateSliderValue('sweetnessRange', 'sweetnessValue', '%')">
+                                <div class="slider-scale"><span>平淡</span><span>甜蜜</span></div>
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <span class="slider-label">语气强度</span>
+                                    <span class="slider-value" id="toneStrengthValue">5</span>
+                                </div>
+                                <input type="range" class="slider-input gradient-slider" id="toneStrengthRange" min="1" max="10" value="5" oninput="updateSliderValue('toneStrengthRange', 'toneStrengthValue', '')">
+                                <div class="slider-scale"><span>温和</span><span>强烈</span></div>
+                            </div>
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <span class="slider-label">幽默含量</span>
+                                    <span class="slider-value" id="humorLevelValue">3</span>
+                                </div>
+                                <input type="range" class="slider-input gradient-slider" id="humorLevelRange" min="1" max="10" value="3" oninput="updateSliderValue('humorLevelRange', 'humorLevelValue', '')">
+                                <div class="slider-scale"><span>严肃</span><span>幽默</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">💋</span>
+                                <span class="settings-item-label">调情技法</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
+                            </div>
+                        </div>
+                        <div class="settings-item-body" onclick="event.stopPropagation()">
+                            <div class="technique-tags" id="techniqueTagsContainer">
+                                <span class="technique-tag" data-technique="push-pull" onclick="toggleTechnique(this)">推拉法</span>
+                                <span class="technique-tag" data-technique="deliberate-misinterpret" onclick="toggleTechnique(this)">故意曲解</span>
+                                <span class="technique-tag" data-technique="cold-reading" onclick="toggleTechnique(this)">冷读</span>
+                                <span class="technique-tag" data-technique="721-model" onclick="toggleTechnique(this)">721模型</span>
+                                <span class="technique-tag" data-technique="nickname" onclick="toggleTechnique(this)">起绰号</span>
+                                <span class="technique-tag" data-technique="deep-connection" onclick="toggleTechnique(this)">深层次连情</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- AI模型服务 -->
-                <div class="settings-panel" id="panel-ai">
-                    <div class="panel-title">AI模型服务</div>
-                    
-                    <div class="provider-list" id="providerList"></div>
+                <div class="settings-panel" id="panel-ai" data-panel="ai">
+                    <div class="panel-section-title">AI模型配置</div>
 
-                    <button class="add-provider-btn" onclick="openAddProvider()">
-                        <span style="font-size:20px;">+</span>
-                        <span>添加新服务商</span>
-                    </button>
-                </div>
-
-                <!-- 生成参数 -->
-                <div class="settings-panel" id="panel-generate">
-                    <div class="panel-title">生成参数</div>
-                    <div class="form-group">
-                        <label class="form-label">生成长度</label>
-                        <select class="form-select" id="lengthSelect">
-                            <option value="short">简短（1-2句）</option>
-                            <option value="medium" selected>中等（3-4句）</option>
-                            <option value="long">详细（5句以上）</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">创意程度</label>
-                        <select class="form-select" id="creativitySelect">
-                            <option value="low">保守</option>
-                            <option value="medium" selected>平衡</option>
-                            <option value="high">创意</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">每次生成数量</label>
-                        <div style="display:flex;align-items:center;gap:12px;">
-                            <input type="range" id="batchSizeRange" min="1" max="20" value="6" 
-                                style="flex:1;accent-color:#667eea;height:6px;" 
-                                oninput="document.getElementById('batchSizeValue').textContent=this.value">
-                            <span id="batchSizeValue" style="min-width:32px;text-align:center;font-weight:600;color:var(--primary-color);">6</span>
-                            <span style="color:var(--text-secondary);font-size:13px;">条</span>
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">🌐</span>
+                                <span class="settings-item-label">服务商平台</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
+                            </div>
                         </div>
-                        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-top:4px;">
-                            <span>1条</span>
-                            <span>20条</span>
+                        <div class="settings-item-body" onclick="event.stopPropagation()">
+                            <div class="platform-tags">
+                                <span class="platform-tag" data-platform="openai" onclick="togglePlatform(this)">OpenAI</span>
+                                <span class="platform-tag" data-platform="claude" onclick="togglePlatform(this)">Claude</span>
+                                <span class="platform-tag" data-platform="deepseek" onclick="togglePlatform(this)">DeepSeek</span>
+                                <span class="platform-tag" data-platform="kimi" onclick="togglePlatform(this)">Kimi</span>
+                                <span class="platform-tag" data-platform="doubao" onclick="togglePlatform(this)">豆包</span>
+                                <span class="platform-tag" data-platform="qwen" onclick="togglePlatform(this)">通义千问</span>
+                            </div>
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="saveGenerate()">保存设置</button>
+
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">🔑</span>
+                                <span class="settings-item-label">API密钥配置</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
+                            </div>
+                        </div>
+                        <div class="settings-item-body" id="apiConfigContainer" onclick="event.stopPropagation()">
+                            <div class="api-empty-state" id="apiEmptyState">
+                                <span class="api-empty-icon">🌐</span>
+                                <span class="api-empty-text">请先在"服务商平台"中选择要配置的平台</span>
+                            </div>
+                            <div class="api-config-item" data-platform="openai" style="display:none;">
+                                <div class="api-platform-label">OpenAI</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="openaiUrl" placeholder="https://api.openai.com/v1/chat/completions">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="openaiKey" placeholder="sk-...">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-config-item" data-platform="claude" style="display:none;">
+                                <div class="api-platform-label">Claude</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="claudeUrl" placeholder="https://api.anthropic.com/v1/messages">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="claudeKey" placeholder="sk-ant-...">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-config-item" data-platform="deepseek" style="display:none;">
+                                <div class="api-platform-label">DeepSeek</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="deepseekUrl" placeholder="https://api.deepseek.com/v1/chat/completions">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="deepseekKey" placeholder="sk-...">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-config-item" data-platform="kimi" style="display:none;">
+                                <div class="api-platform-label">Kimi</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="kimiUrl" placeholder="https://api.moonshot.cn/v1/chat/completions">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="kimiKey" placeholder="sk-...">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-config-item" data-platform="doubao" style="display:none;">
+                                <div class="api-platform-label">豆包</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="doubaoUrl" placeholder="https://ark.cn-beijing.volces.com/api/v3/chat/completions">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="doubaoKey" placeholder="API密钥">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-config-item" data-platform="qwen" style="display:none;">
+                                <div class="api-platform-label">通义千问</div>
+                                <div class="form-group">
+                                    <label class="form-label">API地址</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔗</span>
+                                        <input type="text" class="form-input" id="qwenUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">API密钥</label>
+                                    <div class="input-with-icon">
+                                        <span class="input-icon">🔐</span>
+                                        <input type="password" class="form-input" id="qwenKey" placeholder="API密钥">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-item expandable">
+                        <div class="settings-item-header" onclick="toggleExpand(this.parentElement)">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">📋</span>
+                                <span class="settings-item-label">模型列表</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <span class="expand-arrow">▶</span>
+                            </div>
+                        </div>
+                        <div class="settings-item-body" onclick="event.stopPropagation()">
+                            <div class="model-list" id="modelListContainer">
+                            </div>
+                            <div class="model-add-row">
+                                <input type="text" class="form-input" id="newModelName" placeholder="输入模型名称">
+                                <button class="add-model-btn" onclick="addModel()">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-item">
+                        <button class="save-all-btn" onclick="saveAllSettings()">保存所有设置</button>
+                    </div>
                 </div>
 
-                <!-- 内容处理 -->
-                <div class="settings-panel" id="panel-process">
-                    <div class="panel-title">内容处理</div>
-                    <div class="form-checkbox">
-                        <input type="checkbox" id="autoEmoji">
-                        <span>自动添加表情符号</span>
-                    </div>
-                    <div class="form-checkbox">
-                        <input type="checkbox" id="autoNumber" checked>
-                        <span>自动添加序号</span>
-                    </div>
-                    <div class="form-checkbox">
-                        <input type="checkbox" id="sensitiveFilter">
-                        <span>敏感词过滤</span>
-                    </div>
-                    <div class="form-group" style="margin-top:16px;">
-                        <label class="form-label">输出格式</label>
-                        <select class="form-select">
-                            <option value="text" selected>纯文本</option>
-                            <option value="markdown">Markdown</option>
-                            <option value="json">JSON</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary" onclick="saveProcess()">保存设置</button>
-                </div>
+                <div class="settings-panel" id="panel-preference" data-panel="preference">
+                    <div class="panel-section-title">内容偏好</div>
 
-                <!-- 数据同步 -->
-                <div class="settings-panel" id="panel-sync">
-                    <div class="panel-title">数据同步 (WebDAV)</div>
-                    <div class="form-group">
-                        <label class="form-label">服务器地址</label>
-                        <input type="text" class="form-input" id="webDavUrl" placeholder="https://your-dav-server.com/remote.php/dav/files/yourusername/">
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">📏</span>
+                                <span class="settings-item-label">生成长度</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <select class="form-select compact" id="lengthSelect">
+                                    <option value="short">简短</option>
+                                    <option value="medium" selected>中等</option>
+                                    <option value="long">详细</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">用户名</label>
-                        <input type="text" class="form-input" id="webDavUser" placeholder="用户名">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">密码</label>
-                        <input type="password" class="form-input" id="webDavPass" placeholder="密码">
-                    </div>
-                    <div class="form-checkbox">
-                        <input type="checkbox" id="webDavEnable">
-                        <span>启用自动同步</span>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">同步频率</label>
-                        <select class="form-select" id="webDavInterval">
-                            <option value="300000">5分钟</option>
-                            <option value="600000">10分钟</option>
-                            <option value="1800000" selected>30分钟</option>
-                            <option value="3600000">1小时</option>
-                        </select>
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick="syncNow()">立即同步</button>
-                        <button class="btn btn-secondary" onclick="restoreFromWebDav()">恢复数据</button>
-                        <button class="btn btn-primary" onclick="saveSync()">保存设置</button>
-                    </div>
-                    <div class="sync-status" id="syncStatus" style="margin-top:10px;font-size:12px;color:var(--text-secondary);"></div>
-                </div>
 
-                <!-- 历史管理 -->
-                <div class="settings-panel" id="panel-history">
-                    <div class="panel-title">历史管理</div>
-                    <div class="form-group">
-                        <label class="form-label">保留天数</label>
-                        <select class="form-select">
-                            <option value="7">7天</option>
-                            <option value="30" selected>30天</option>
-                            <option value="90">90天</option>
-                            <option value="365">永久</option>
-                        </select>
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">🎨</span>
+                                <span class="settings-item-label">创意程度</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <select class="form-select compact" id="creativitySelect">
+                                    <option value="low">保守</option>
+                                    <option value="medium" selected>平衡</option>
+                                    <option value="high">创意</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">最大条数</label>
-                        <select class="form-select">
-                            <option value="50" selected>50条</option>
-                            <option value="100">100条</option>
-                            <option value="200">200条</option>
-                        </select>
+
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">🔢</span>
+                                <span class="settings-item-label">每次生成数量</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <div class="stepper">
+                                    <button class="stepper-btn" onclick="stepperAdjust('batchSize', -1)">−</button>
+                                    <span class="stepper-value" id="batchSizeValue">6</span>
+                                    <button class="stepper-btn" onclick="stepperAdjust('batchSize', 1)">+</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick="exportHistory()">导出</button>
-                        <button class="btn btn-danger" onclick="clearAllHistory()">清空</button>
+
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <div class="settings-item-info">
+                                <span class="settings-item-icon">😀</span>
+                                <span class="settings-item-label">自动添加表情</span>
+                            </div>
+                            <div class="settings-item-meta">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoEmojiToggle" onchange="toggleSwitch('autoEmoji')">
+                                    <span class="toggle-slider"></span>
+                                    <span class="toggle-label" id="autoEmojiLabel">关</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -514,21 +625,21 @@
                 </div>
 
                 <div id="providerConfig" style="display:none;">
-                    <div class="form-group">
-                        <label class="form-label">服务商名称</label>
+                    <div>
+                        <label>服务商名称</label>
                         <input type="text" class="form-input" id="providerName" placeholder="给我的API起个名字">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">API 地址</label>
+                    <div>
+                        <label>API 地址</label>
                         <input type="text" class="form-input" id="providerUrl" placeholder="https://api.openai.com/v1/chat/completions">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">API 密钥</label>
-                        <input type="password" class="form-input" id="providerKey" placeholder="sk-...">
+                    <div>
+                        <label>API 密钥</label>
                     </div>
-                    
-                    <div class="panel-title" style="margin-top:16px;">模型列表</div>
                     <div class="model-list-container" id="providerModelsList">
+                    <button class="btn btn-secondary" onclick="addModelInput()" style="margin-top:8px;width:100%;">
+                        + 添加模型
+                    </button>
                         <div class="model-list-header">
                             <div class="model-col-radio"></div>
                             <div class="model-col-name">模型名称</div>
